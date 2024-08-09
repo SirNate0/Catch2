@@ -11,58 +11,59 @@
 #include <catch2/internal/catch_platform.hpp>
 #include <catch2/internal/catch_reusable_string_stream.hpp>
 #include <catch2/internal/catch_compiler_capabilities.hpp>
+#include <catch2/internal/catch_unique_ptr.hpp>
 
+#include <cassert>
 #include <cstdio>
 #include <iosfwd>
 #include <string>
 
 namespace Catch {
 
-    class RedirectedStream {
-        std::ostream& m_originalStream;
-        std::ostream& m_redirectionStream;
-        std::streambuf* m_prevBuf;
-
+    class OutputRedirectNew {
+        bool m_redirectActive = false;
+        virtual void activateImpl() = 0;
+        virtual void deactivateImpl() = 0;
     public:
-        RedirectedStream( std::ostream& originalStream, std::ostream& redirectionStream );
-        ~RedirectedStream();
+        virtual ~OutputRedirectNew(); // = default;
+
+        // TODO: check that redirect is not active before retrieving stdout/stderr?
+        virtual std::string getStdout() = 0;
+        virtual std::string getStderr() = 0;
+        virtual void clearBuffers() = 0;
+        void activate() {
+            assert( !m_redirectActive && "redirect is already active" );
+            activateImpl();
+            m_redirectActive = true;
+        }
+        void deactivate() {
+            assert( m_redirectActive && "redirect is not active" );
+            deactivateImpl();
+            m_redirectActive = false;
+        }
     };
 
-    class RedirectedStdOut {
-        ReusableStringStream m_rss;
-        RedirectedStream m_cout;
+    Detail::unique_ptr<OutputRedirectNew> makeOutputRedirect( bool actual );
+
+    class RedirectGuard {
+        OutputRedirectNew* m_redirect;
+        bool m_activate;
+        bool m_moved = false;
+
     public:
-        RedirectedStdOut();
-        auto str() const -> std::string;
+        RedirectGuard( bool activate, OutputRedirectNew& redirectImpl );
+        ~RedirectGuard() noexcept( false );
+
+        RedirectGuard( RedirectGuard const& ) = delete;
+        RedirectGuard& operator=( RedirectGuard const& ) = delete;
+
+        // C++14 needs move-able guards to return them from functions
+        RedirectGuard( RedirectGuard&& rhs ) noexcept;
+        RedirectGuard& operator=( RedirectGuard&& rhs ) noexcept;
     };
 
-    // StdErr has two constituent streams in C++, std::cerr and std::clog
-    // This means that we need to redirect 2 streams into 1 to keep proper
-    // order of writes
-    class RedirectedStdErr {
-        ReusableStringStream m_rss;
-        RedirectedStream m_cerr;
-        RedirectedStream m_clog;
-    public:
-        RedirectedStdErr();
-        auto str() const -> std::string;
-    };
-
-    class RedirectedStreams {
-    public:
-        RedirectedStreams(RedirectedStreams const&) = delete;
-        RedirectedStreams& operator=(RedirectedStreams const&) = delete;
-        RedirectedStreams(RedirectedStreams&&) = delete;
-        RedirectedStreams& operator=(RedirectedStreams&&) = delete;
-
-        RedirectedStreams(std::string& redirectedCout, std::string& redirectedCerr);
-        ~RedirectedStreams();
-    private:
-        std::string& m_redirectedCout;
-        std::string& m_redirectedCerr;
-        RedirectedStdOut m_redirectedStdOut;
-        RedirectedStdErr m_redirectedStdErr;
-    };
+    RedirectGuard scopedActivate( OutputRedirectNew& redirectImpl );
+    RedirectGuard scopedDeactivate( OutputRedirectNew& redirectImpl );
 
 #if defined(CATCH_CONFIG_NEW_CAPTURE)
 

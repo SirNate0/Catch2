@@ -170,6 +170,7 @@ namespace Catch {
         m_config(_config),
         m_reporter(CATCH_MOVE(reporter)),
         m_lastAssertionInfo{ StringRef(), SourceLineInfo("",0), StringRef(), ResultDisposition::Normal },
+        m_outputRedirect( makeOutputRedirect( m_reporter->getPreferences().shouldRedirectStdOut ) ),
         m_includeSuccessfulResults( m_config->includeSuccessfulResults() || m_reporter->getPreferences().shouldReportAllAssertions )
     {
         getCurrentMutableContext().setResultCapture( this );
@@ -236,15 +237,17 @@ namespace Catch {
             m_reporter->testCasePartialStarting(testInfo, testRuns);
 
             const auto beforeRunTotals = m_totals;
-            std::string oneRunCout, oneRunCerr;
-            runCurrentTest(oneRunCout, oneRunCerr);
+            runCurrentTest();
+            std::string oneRunCout = m_outputRedirect->getStdout();
+            std::string oneRunCerr = m_outputRedirect->getStderr();
+            m_outputRedirect->clearBuffers();
             redirectedCout += oneRunCout;
             redirectedCerr += oneRunCerr;
 
             const auto singleRunTotals = m_totals.delta(beforeRunTotals);
             auto statsForOneRun = TestCaseStats(testInfo, singleRunTotals, CATCH_MOVE(oneRunCout), CATCH_MOVE(oneRunCerr), aborting());
-
             m_reporter->testCasePartialEnded(statsForOneRun, testRuns);
+
             ++testRuns;
         } while (!m_testCaseTracker->isSuccessfullyCompleted() && !aborting());
 
@@ -289,7 +292,10 @@ namespace Catch {
             m_lastAssertionPassed = true;
         }
 
-        m_reporter->assertionEnded(AssertionStats(result, m_messages, m_totals));
+        {
+            auto _ = scopedDeactivate( *m_outputRedirect );
+            m_reporter->assertionEnded( AssertionStats( result, m_messages, m_totals ) );
+        }
 
         if ( result.getResultType() != ResultWas::Warning ) {
             m_messageScopes.clear();
@@ -306,12 +312,14 @@ namespace Catch {
     }
 
     void RunContext::notifyAssertionStarted( AssertionInfo const& info ) {
+        auto _ = scopedDeactivate( *m_outputRedirect );
         m_reporter->assertionStarting( info );
     }
 
     bool RunContext::sectionStarted( StringRef sectionName,
                                      SourceLineInfo const& sectionLineInfo,
                                      Counts& assertions ) {
+        auto _ = scopedDeactivate( *m_outputRedirect );
         ITracker& sectionTracker =
             SectionTracker::acquire( m_trackerContext,
                                      TestCaseTracking::NameAndLocationRef(
@@ -376,6 +384,7 @@ namespace Catch {
     }
 
     void RunContext::sectionEnded(SectionEndInfo&& endInfo) {
+        auto _ = scopedDeactivate( *m_outputRedirect );
         Counts assertions = m_totals.assertions - endInfo.prevAssertions;
         bool missingAssertions = testForMissingAssertions(assertions);
 
@@ -390,6 +399,7 @@ namespace Catch {
     }
 
     void RunContext::sectionEndedEarly(SectionEndInfo&& endInfo) {
+        auto _ = scopedDeactivate( *m_outputRedirect );
         if ( m_unfinishedSections.empty() ) {
             m_activeSections.back()->fail();
         } else {
@@ -401,15 +411,19 @@ namespace Catch {
     }
 
     void RunContext::benchmarkPreparing( StringRef name ) {
-        m_reporter->benchmarkPreparing(name);
+        auto _ = scopedDeactivate( *m_outputRedirect );
+        m_reporter->benchmarkPreparing( name );
     }
     void RunContext::benchmarkStarting( BenchmarkInfo const& info ) {
+        auto _ = scopedDeactivate( *m_outputRedirect );
         m_reporter->benchmarkStarting( info );
     }
     void RunContext::benchmarkEnded( BenchmarkStats<> const& stats ) {
+        auto _ = scopedDeactivate( *m_outputRedirect );
         m_reporter->benchmarkEnded( stats );
     }
     void RunContext::benchmarkFailed( StringRef error ) {
+        auto _ = scopedDeactivate( *m_outputRedirect );
         m_reporter->benchmarkFailed( error );
     }
 
@@ -440,6 +454,9 @@ namespace Catch {
     }
 
     void RunContext::handleFatalErrorCondition( StringRef message ) {
+        // TODO: scoped deactivate here? Just give up and do best effort?
+
+
         // First notify reporter that bad things happened
         m_reporter->fatalErrorEncountered(message);
 
@@ -499,7 +516,7 @@ namespace Catch {
         return m_totals.assertions.failed >= static_cast<std::size_t>(m_config->abortAfter());
     }
 
-    void RunContext::runCurrentTest(std::string & redirectedCout, std::string & redirectedCerr) {
+    void RunContext::runCurrentTest() {
         auto const& testCaseInfo = m_activeTestCase->getTestCaseInfo();
         SectionInfo testCaseSection(testCaseInfo.lineInfo, testCaseInfo.name);
         m_reporter->sectionStarting(testCaseSection);
@@ -510,18 +527,8 @@ namespace Catch {
 
         Timer timer;
         CATCH_TRY {
-            if (m_reporter->getPreferences().shouldRedirectStdOut) {
-#if !defined(CATCH_CONFIG_EXPERIMENTAL_REDIRECT)
-                RedirectedStreams redirectedStreams(redirectedCout, redirectedCerr);
-
-                timer.start();
-                invokeActiveTestCase();
-#else
-                OutputRedirect r(redirectedCout, redirectedCerr);
-                timer.start();
-                invokeActiveTestCase();
-#endif
-            } else {
+            {
+                auto _ = scopedActivate( *m_outputRedirect );
                 timer.start();
                 invokeActiveTestCase();
             }
@@ -566,11 +573,13 @@ namespace Catch {
     void RunContext::handleUnfinishedSections() {
         // If sections ended prematurely due to an exception we stored their
         // infos here so we can tear them down outside the unwind process.
-        for (auto it = m_unfinishedSections.rbegin(),
-             itEnd = m_unfinishedSections.rend();
-             it != itEnd;
-             ++it)
-            sectionEnded(CATCH_MOVE(*it));
+        for ( auto it = m_unfinishedSections.rbegin(),
+                   itEnd = m_unfinishedSections.rend();
+              it != itEnd;
+              ++it ) {
+            scopedActivate( *m_outputRedirect );
+            sectionEnded( CATCH_MOVE( *it ) );
+        }
         m_unfinishedSections.clear();
     }
 

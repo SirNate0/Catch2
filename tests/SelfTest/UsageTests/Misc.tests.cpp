@@ -482,6 +482,20 @@ TEST_CASE( "# A test name that starts with a #" ) {
     SUCCEED( "yay" );
 }
 
+TEST_CASE( "REDIRECT: multiple outputs 1", "[redirect-test]" ) {
+    std::cout << "start 1\n";
+    SECTION( "A" ) { std::cout << "A\n"; }
+    SECTION( "B" ) { std::cout << "B\n"; }
+    std::cout << "end 1\n";
+}
+
+TEST_CASE( "REDIRECT: multiple outputs 2", "[redirect-test]" ) {
+    std::cout << "start 2\n";
+    SECTION( "A" ) { std::cout << "A\n"; }
+    SECTION( "B" ) { std::cout << "B\n"; }
+    std::cout << "end 2\n";
+}
+
 TEST_CASE( "#835 -- errno should not be touched by Catch2", "[.][failing][!shouldfail]" ) {
     errno = 1;
     // Check that reporting failed test doesn't change errno.
