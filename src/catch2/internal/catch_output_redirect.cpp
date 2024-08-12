@@ -70,6 +70,8 @@ namespace Catch {
         class StreamRedirect : public OutputRedirectNew {
             ReusableStringStream m_redirectedOut, m_redirectedErr;
             RedirectedStreamNew m_cout, m_cerr, m_clog;
+
+        public:
             StreamRedirect():
                 m_cout( Catch::cout(), m_redirectedOut.get() ),
                 m_cerr( Catch::cerr(), m_redirectedErr.get() ),
@@ -92,6 +94,9 @@ namespace Catch {
                 m_redirectedErr.str( "" );
             }
         };
+
+
+#if defined( CATCH_CONFIG_NEW_CAPTURE )
 
         // Windows's implementation of std::tmpfile is terrible (it tries
         // to create a file inside system folder, thus requiring elevated
@@ -214,11 +219,33 @@ namespace Catch {
             }
         };
 
+#endif // CATCH_CONFIG_NEW_CAPTURE
+
     } // end namespace
+
+    bool isRedirectAvailable( OutputRedirectNew::Kind kind ) {
+        switch ( kind ) {
+        // These two are always available
+        case OutputRedirectNew::None:
+        case OutputRedirectNew::Streams:
+            return true;
+#if defined( CATCH_CONFIG_NEW_CAPTURE )
+        case OutputRedirectNew::FileDescriptors:
+            return true;
+#endif
+        default:
+            return false;
+        }
+    }
 
     Detail::unique_ptr<OutputRedirectNew> makeOutputRedirect( bool actual ) {
         if ( actual ) {
+            // TODO: Clean this up later
+#if defined( CATCH_CONFIG_NEW_CAPTURE )
             return Detail::make_unique<FileRedirect>();
+#else
+            return Detail::make_unique<StreamRedirect>();
+#endif
         } else {
             return Detail::make_unique<NoopRedirect>();
         }
@@ -233,85 +260,6 @@ namespace Catch {
     }
 
     OutputRedirectNew::~OutputRedirectNew() = default;
-
-
-#if defined(CATCH_CONFIG_NEW_CAPTURE)
-
-#if defined(_MSC_VER)
-    TempFile::TempFile() {
-        if (tmpnam_s(m_buffer)) {
-            CATCH_RUNTIME_ERROR("Could not get a temp filename");
-        }
-        if (fopen_s(&m_file, m_buffer, "w+")) {
-            char buffer[100];
-            if (strerror_s(buffer, errno)) {
-                CATCH_RUNTIME_ERROR("Could not translate errno to a string");
-            }
-            CATCH_RUNTIME_ERROR("Could not open the temp file: '" << m_buffer << "' because: " << buffer);
-        }
-    }
-#else
-    TempFile::TempFile() {
-        m_file = std::tmpfile();
-        if (!m_file) {
-            CATCH_RUNTIME_ERROR("Could not create a temp file.");
-        }
-    }
-
-#endif
-
-    TempFile::~TempFile() {
-         // TBD: What to do about errors here?
-         std::fclose(m_file);
-         // We manually create the file on Windows only, on Linux
-         // it will be autodeleted
-#if defined(_MSC_VER)
-         std::remove(m_buffer);
-#endif
-    }
-
-
-    FILE* TempFile::getFile() {
-        return m_file;
-    }
-
-    std::string TempFile::getContents() {
-        std::stringstream sstr;
-        char buffer[100] = {};
-        std::rewind(m_file);
-        while (std::fgets(buffer, sizeof(buffer), m_file)) {
-            sstr << buffer;
-        }
-        return sstr.str();
-    }
-
-    OutputRedirect::OutputRedirect(std::string& stdout_dest, std::string& stderr_dest) :
-        m_originalStdout(dup(1)),
-        m_originalStderr(dup(2)),
-        m_stdoutDest(stdout_dest),
-        m_stderrDest(stderr_dest) {
-        dup2(fileno(m_stdoutFile.getFile()), 1);
-        dup2(fileno(m_stderrFile.getFile()), 2);
-    }
-
-    OutputRedirect::~OutputRedirect() {
-        Catch::cout() << std::flush;
-        fflush(stdout);
-        // Since we support overriding these streams, we flush cerr
-        // even though std::cerr is unbuffered
-        Catch::cerr() << std::flush;
-        Catch::clog() << std::flush;
-        fflush(stderr);
-
-        dup2(m_originalStdout, 1);
-        dup2(m_originalStderr, 2);
-
-        m_stdoutDest += m_stdoutFile.getContents();
-        m_stderrDest += m_stderrFile.getContents();
-    }
-
-#endif // CATCH_CONFIG_NEW_CAPTURE
-
 
     // TODO: pass pointer?
 RedirectGuard::RedirectGuard( bool activate,
