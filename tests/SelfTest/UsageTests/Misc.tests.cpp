@@ -489,6 +489,8 @@ TEST_CASE( "REDIRECT: multiple outputs 1", "[approvals][redirect-test]" ) {
     std::cout << "end 1\n";
 }
 
+TEST_CASE( "REDIRECT: multiple outputs 1.5", "[approvals][redirect-test]" ) {}
+
 TEST_CASE( "REDIRECT: multiple outputs 2", "[approvals][redirect-test]" ) {
     std::cout << "start 2\n";
     SECTION( "A" ) { std::cout << "A\n"; }

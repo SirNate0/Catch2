@@ -145,15 +145,27 @@ namespace Catch {
             std::FILE* getFile() { return m_file; }
             std::string getContents() {
                 ReusableStringStream sstr;
-                char buffer[100] = {};
+                constexpr long buffer_size = 100;
+                char buffer[buffer_size + 1] = {};
+                long current_pos = ftell( m_file );
+                CATCH_ENFORCE( current_pos >= 0, "ftell failed, errno: " << errno );
                 std::rewind( m_file );
-                while ( std::fgets( buffer, sizeof( buffer ), m_file ) ) {
+                while (current_pos > 0) {
+                    auto read_characters =
+                        std::fread( buffer,
+                                    1,
+                                    std::min( buffer_size, current_pos ),
+                                    m_file );
+                    buffer[read_characters] = '\0';
                     sstr << buffer;
+                    current_pos -= static_cast<long>(read_characters);
                 }
                 return sstr.str();
             }
 
-            void clear() { std::rewind( m_file ); }
+            void clear() {
+                std::rewind( m_file );
+            }
 
         private:
             std::FILE* m_file = nullptr;
@@ -187,7 +199,10 @@ namespace Catch {
         public:
             FileRedirect():
                 m_originalOut( dup( fileno( stdout ) ) ),
-                m_originalErr( dup( fileno( stderr ) ) ) {}
+                m_originalErr( dup( fileno( stderr ) ) ){
+                CATCH_ENFORCE( m_originalOut >= 0, "Could not dup stdout" );
+                CATCH_ENFORCE( m_originalErr >= 0, "Could not dup stderr" );
+            }
 
             std::string getStdout() override { return m_outFile.getContents(); }
             std::string getStderr() override { return m_errFile.getContents(); }
@@ -201,18 +216,22 @@ namespace Catch {
                 // not capture the end of message sent before activation.
                 flushEverything();
 
-                // TODO: error handling.
-                dup2( fileno( m_outFile.getFile() ), fileno( stdout ) );
-                dup2( fileno( m_errFile.getFile() ), fileno( stderr ) );
+                int ret;
+                ret = dup2( fileno( m_outFile.getFile() ), fileno( stdout ) );
+                CATCH_ENFORCE( ret >= 0, "dup2 to stdout has failed, errno: " << errno );
+                ret = dup2( fileno( m_errFile.getFile() ), fileno( stderr ) );
+                CATCH_ENFORCE( ret >= 0, "dup2 to stderr has failed, errno: " << errno );
             }
             void deactivateImpl() override {
                 // We flush before ending redirect, to ensure that we
                 // capture all messages sent while the redirect was active.
                 flushEverything();
 
-                // TODO: error handling.
-                dup2( m_originalOut, fileno( stdout ) );
-                dup2( m_originalErr, fileno( stderr ) );
+                int ret;
+                ret = dup2( m_originalOut, fileno( stdout ) );
+                CATCH_ENFORCE( ret >= 0, "dup2 of original stdout has failed, errno: " << errno );
+                ret = dup2( m_originalErr, fileno( stderr ) );
+                CATCH_ENFORCE( ret >= 0, "dup2 of original stderr has failed, errno: " << errno );
             }
         };
 
@@ -258,7 +277,6 @@ namespace Catch {
 
     OutputRedirectNew::~OutputRedirectNew() = default;
 
-    // TODO: pass pointer?
     RedirectGuard::RedirectGuard( bool activate,
                                   OutputRedirectNew& redirectImpl ):
         m_redirect( &redirectImpl ),
