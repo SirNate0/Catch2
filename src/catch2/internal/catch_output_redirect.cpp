@@ -29,7 +29,7 @@ namespace Catch {
     namespace {
         //! A no-op implementation, used if no reporter wants output
         //! redirection.
-        class NoopRedirect : public OutputRedirectNew {
+        class NoopRedirect : public OutputRedirect {
             void activateImpl() override {}
             void deactivateImpl() override {}
             std::string getStdout() override { return {}; }
@@ -66,7 +66,7 @@ namespace Catch {
          * Redirects the `std::cout`, `std::cerr`, `std::clog` streams,
          * but does not touch the actual `stdout`/`stderr` file descriptors.
          */
-        class StreamRedirect : public OutputRedirectNew {
+        class StreamRedirect : public OutputRedirect {
             ReusableStringStream m_redirectedOut, m_redirectedErr;
             RedirectedStreamNew m_cout, m_cerr, m_clog;
 
@@ -100,15 +100,15 @@ namespace Catch {
         // to create a file inside system folder, thus requiring elevated
         // privileges for the binary), so we have to use tmpnam(_s) and
         // create the file ourselves there.
-        class TempFile2 {
+        class TempFile {
         public:
-            TempFile2( TempFile2 const& ) = delete;
-            TempFile2& operator=( TempFile2 const& ) = delete;
-            TempFile2( TempFile2&& ) = delete;
-            TempFile2& operator=( TempFile2&& ) = delete;
+            TempFile( TempFile const& ) = delete;
+            TempFile& operator=( TempFile const& ) = delete;
+            TempFile( TempFile&& ) = delete;
+            TempFile& operator=( TempFile&& ) = delete;
 
 #    if defined( _MSC_VER )
-            TempFile2() {
+            TempFile() {
                 if ( tmpnam_s( m_buffer ) ) {
                     CATCH_RUNTIME_ERROR( "Could not get a temp filename" );
                 }
@@ -124,7 +124,7 @@ namespace Catch {
                 }
             }
 #    else
-            TempFile2() {
+            TempFile() {
                 m_file = std::tmpfile();
                 if ( !m_file ) {
                     CATCH_RUNTIME_ERROR( "Could not create a temp file." );
@@ -132,7 +132,7 @@ namespace Catch {
             }
 #    endif
 
-            ~TempFile2() {
+            ~TempFile() {
                 // TBD: What to do about errors here?
                 std::fclose( m_file );
                 // We manually create the file on Windows only, on Linux
@@ -180,8 +180,8 @@ namespace Catch {
          * Works by replacing the file descriptors numbered 1 and 2
          * with an open temporary file.
          */
-        class FileRedirect : public OutputRedirectNew {
-            TempFile2 m_outFile, m_errFile;
+        class FileRedirect : public OutputRedirect {
+            TempFile m_outFile, m_errFile;
             int m_originalOut = -1;
             int m_originalErr = -1;
 
@@ -239,14 +239,14 @@ namespace Catch {
 
     } // end namespace
 
-    bool isRedirectAvailable( OutputRedirectNew::Kind kind ) {
+    bool isRedirectAvailable( OutputRedirect::Kind kind ) {
         switch ( kind ) {
         // These two are always available
-        case OutputRedirectNew::None:
-        case OutputRedirectNew::Streams:
+        case OutputRedirect::None:
+        case OutputRedirect::Streams:
             return true;
 #if defined( CATCH_CONFIG_NEW_CAPTURE )
-        case OutputRedirectNew::FileDescriptors:
+        case OutputRedirect::FileDescriptors:
             return true;
 #endif
         default:
@@ -254,7 +254,7 @@ namespace Catch {
         }
     }
 
-    Detail::unique_ptr<OutputRedirectNew> makeOutputRedirect( bool actual ) {
+    Detail::unique_ptr<OutputRedirect> makeOutputRedirect( bool actual ) {
         if ( actual ) {
             // TODO: Clean this up later
 #if defined( CATCH_CONFIG_NEW_CAPTURE )
@@ -267,18 +267,18 @@ namespace Catch {
         }
     }
 
-    RedirectGuard scopedActivate( OutputRedirectNew& redirectImpl ) {
+    RedirectGuard scopedActivate( OutputRedirect& redirectImpl ) {
         return RedirectGuard( true, redirectImpl );
     }
 
-    RedirectGuard scopedDeactivate( OutputRedirectNew& redirectImpl ) {
+    RedirectGuard scopedDeactivate( OutputRedirect& redirectImpl ) {
         return RedirectGuard( false, redirectImpl );
     }
 
-    OutputRedirectNew::~OutputRedirectNew() = default;
+    OutputRedirect::~OutputRedirect() = default;
 
     RedirectGuard::RedirectGuard( bool activate,
-                                  OutputRedirectNew& redirectImpl ):
+                                  OutputRedirect& redirectImpl ):
         m_redirect( &redirectImpl ),
         m_activate( activate ),
         m_previouslyActive( redirectImpl.isActive() ) {

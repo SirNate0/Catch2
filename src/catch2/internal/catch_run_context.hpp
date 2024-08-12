@@ -29,7 +29,7 @@ namespace Catch {
     class IConfig;
     class IEventListener;
     using IEventListenerPtr = Detail::unique_ptr<IEventListener>;
-    class OutputRedirectNew;
+    class OutputRedirect;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -149,7 +149,7 @@ namespace Catch {
         std::vector<SectionEndInfo> m_unfinishedSections;
         std::vector<ITracker*> m_activeSections;
         TrackerContext m_trackerContext;
-        Detail::unique_ptr<OutputRedirectNew> m_outputRedirect;
+        Detail::unique_ptr<OutputRedirect> m_outputRedirect;
         FatalConditionHandler m_fatalConditionhandler;
         bool m_lastAssertionPassed = false;
         bool m_shouldReportUnexpected = true;

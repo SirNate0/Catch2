@@ -20,7 +20,7 @@
 
 namespace Catch {
 
-    class OutputRedirectNew {
+    class OutputRedirect {
         bool m_redirectActive = false;
         virtual void activateImpl() = 0;
         virtual void deactivateImpl() = 0;
@@ -34,7 +34,7 @@ namespace Catch {
             FileDescriptors,
         };
 
-        virtual ~OutputRedirectNew(); // = default;
+        virtual ~OutputRedirect(); // = default;
 
         // TODO: check that redirect is not active before retrieving stdout/stderr?
         virtual std::string getStdout() = 0;
@@ -53,17 +53,17 @@ namespace Catch {
         }
     };
 
-    bool isRedirectAvailable( OutputRedirectNew::Kind kind);
-    Detail::unique_ptr<OutputRedirectNew> makeOutputRedirect( bool actual );
+    bool isRedirectAvailable( OutputRedirect::Kind kind);
+    Detail::unique_ptr<OutputRedirect> makeOutputRedirect( bool actual );
 
     class RedirectGuard {
-        OutputRedirectNew* m_redirect;
+        OutputRedirect* m_redirect;
         bool m_activate;
         bool m_previouslyActive;
         bool m_moved = false;
 
     public:
-        RedirectGuard( bool activate, OutputRedirectNew& redirectImpl );
+        RedirectGuard( bool activate, OutputRedirect& redirectImpl );
         ~RedirectGuard() noexcept( false );
 
         RedirectGuard( RedirectGuard const& ) = delete;
@@ -74,8 +74,8 @@ namespace Catch {
         RedirectGuard& operator=( RedirectGuard&& rhs ) noexcept;
     };
 
-    RedirectGuard scopedActivate( OutputRedirectNew& redirectImpl );
-    RedirectGuard scopedDeactivate( OutputRedirectNew& redirectImpl );
+    RedirectGuard scopedActivate( OutputRedirect& redirectImpl );
+    RedirectGuard scopedDeactivate( OutputRedirect& redirectImpl );
 
 } // end namespace Catch
 
