@@ -5,30 +5,30 @@
 //        https://www.boost.org/LICENSE_1_0.txt)
 
 // SPDX-License-Identifier: BSL-1.0
-#include <catch2/internal/catch_output_redirect.hpp>
 #include <catch2/internal/catch_enforce.hpp>
+#include <catch2/internal/catch_output_redirect.hpp>
 #include <catch2/internal/catch_stdstreams.hpp>
 
 #include <cstdio>
 #include <cstring>
 #include <sstream>
 
-#if defined(CATCH_CONFIG_NEW_CAPTURE)
-    #if defined(_MSC_VER)
-    #include <io.h>      //_dup and _dup2
-    #define dup _dup
-    #define dup2 _dup2
-    #define fileno _fileno
-    #else
-    #include <unistd.h>  // dup and dup2
-    #endif
+#if defined( CATCH_CONFIG_NEW_CAPTURE )
+#    if defined( _MSC_VER )
+#        include <io.h> //_dup and _dup2
+#        define dup _dup
+#        define dup2 _dup2
+#        define fileno _fileno
+#    else
+#        include <unistd.h> // dup and dup2
+#    endif
 #endif
-
 
 namespace Catch {
 
     namespace {
-        //! A no-op implementation, used if no reporter wants output redirection.
+        //! A no-op implementation, used if no reporter wants output
+        //! redirection.
         class NoopRedirect : public OutputRedirectNew {
             void activateImpl() override {}
             void deactivateImpl() override {}
@@ -36,7 +36,6 @@ namespace Catch {
             std::string getStderr() override { return {}; }
             void clearBuffers() override {}
         };
-
 
         /**
          * Redirects specific stream's rdbuf with another's.
@@ -95,7 +94,6 @@ namespace Catch {
             }
         };
 
-
 #if defined( CATCH_CONFIG_NEW_CAPTURE )
 
         // Windows's implementation of std::tmpfile is terrible (it tries
@@ -109,7 +107,7 @@ namespace Catch {
             TempFile2( TempFile2&& ) = delete;
             TempFile2& operator=( TempFile2&& ) = delete;
 
-#if defined( _MSC_VER )
+#    if defined( _MSC_VER )
             TempFile2() {
                 if ( tmpnam_s( m_buffer ) ) {
                     CATCH_RUNTIME_ERROR( "Could not get a temp filename" );
@@ -117,30 +115,31 @@ namespace Catch {
                 if ( fopen_s( &m_file, m_buffer, "wb+" ) ) {
                     char buffer[100];
                     if ( strerror_s( buffer, errno ) ) {
-                        CATCH_RUNTIME_ERROR( "Could not translate errno to a string" );
+                        CATCH_RUNTIME_ERROR(
+                            "Could not translate errno to a string" );
                     }
                     CATCH_RUNTIME_ERROR( "Could not open the temp file: '"
                                          << m_buffer
                                          << "' because: " << buffer );
                 }
             }
-#else
+#    else
             TempFile2() {
                 m_file = std::tmpfile();
                 if ( !m_file ) {
                     CATCH_RUNTIME_ERROR( "Could not create a temp file." );
                 }
             }
-#endif
+#    endif
 
             ~TempFile2() {
                 // TBD: What to do about errors here?
                 std::fclose( m_file );
                 // We manually create the file on Windows only, on Linux
                 // it will be autodeleted
-#if defined( _MSC_VER )
+#    if defined( _MSC_VER )
                 std::remove( m_buffer );
-#endif
+#    endif
             }
 
             std::FILE* getFile() { return m_file; }
@@ -154,15 +153,13 @@ namespace Catch {
                 return sstr.str();
             }
 
-            void clear() {
-                std::rewind( m_file );
-            }
+            void clear() { std::rewind( m_file ); }
 
         private:
             std::FILE* m_file = nullptr;
-#if defined( _MSC_VER )
+#    if defined( _MSC_VER )
             char m_buffer[L_tmpnam] = { 0 };
-#endif
+#    endif
         };
 
         /**
@@ -262,47 +259,57 @@ namespace Catch {
     OutputRedirectNew::~OutputRedirectNew() = default;
 
     // TODO: pass pointer?
-RedirectGuard::RedirectGuard( bool activate,
-                              OutputRedirectNew& redirectImpl ):
-        m_redirect( &redirectImpl ) , m_activate( activate ) {
+    RedirectGuard::RedirectGuard( bool activate,
+                                  OutputRedirectNew& redirectImpl ):
+        m_redirect( &redirectImpl ),
+        m_activate( activate ),
+        m_previouslyActive( redirectImpl.isActive() ) {
+
+        // Skip cases where there is no actual state change.
+        if ( m_activate == m_previouslyActive ) { return; }
+
         if ( m_activate ) {
-        m_redirect->activate();
-    } else {
+            m_redirect->activate();
+        } else {
             m_redirect->deactivate();
+        }
     }
-}
 
-RedirectGuard::~RedirectGuard() noexcept( false ) {
-    if ( m_moved ) { return; }
+    RedirectGuard::~RedirectGuard() noexcept( false ) {
+        if ( m_moved ) { return; }
+        // Skip cases where there is no actual state change.
+        if ( m_activate == m_previouslyActive ) { return; }
 
-    if ( m_activate ) {
-        m_redirect->deactivate();
-    } else {
-        m_redirect->activate();
+        if ( m_activate ) {
+            m_redirect->deactivate();
+        } else {
+            m_redirect->activate();
+        }
     }
-}
 
-RedirectGuard::RedirectGuard( RedirectGuard&& rhs ) noexcept:
-    m_redirect( rhs.m_redirect ),
-    m_activate( rhs.m_activate ),
-    m_moved( false ) {
-    rhs.m_moved = true;
-}
+    RedirectGuard::RedirectGuard( RedirectGuard&& rhs ) noexcept:
+        m_redirect( rhs.m_redirect ),
+        m_activate( rhs.m_activate ),
+        m_previouslyActive( rhs.m_previouslyActive ),
+        m_moved( false ) {
+        rhs.m_moved = true;
+    }
 
-RedirectGuard& RedirectGuard::operator=( RedirectGuard&& rhs) noexcept {
-    m_redirect = rhs.m_redirect;
-    m_activate = rhs.m_activate;
-    m_moved = false;
-    rhs.m_moved = true;
-    return *this;
-}
+    RedirectGuard& RedirectGuard::operator=( RedirectGuard&& rhs ) noexcept {
+        m_redirect = rhs.m_redirect;
+        m_activate = rhs.m_activate;
+        m_previouslyActive = rhs.m_previouslyActive;
+        m_moved = false;
+        rhs.m_moved = true;
+        return *this;
+    }
 
 } // namespace Catch
 
-#if defined(CATCH_CONFIG_NEW_CAPTURE)
-    #if defined(_MSC_VER)
-    #undef dup
-    #undef dup2
-    #undef fileno
-    #endif
+#if defined( CATCH_CONFIG_NEW_CAPTURE )
+#    if defined( _MSC_VER )
+#        undef dup
+#        undef dup2
+#        undef fileno
+#    endif
 #endif

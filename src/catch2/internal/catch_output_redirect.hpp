@@ -40,6 +40,7 @@ namespace Catch {
         virtual std::string getStdout() = 0;
         virtual std::string getStderr() = 0;
         virtual void clearBuffers() = 0;
+        bool isActive() const { return m_redirectActive; }
         void activate() {
             assert( !m_redirectActive && "redirect is already active" );
             activateImpl();
@@ -58,6 +59,7 @@ namespace Catch {
     class RedirectGuard {
         OutputRedirectNew* m_redirect;
         bool m_activate;
+        bool m_previouslyActive;
         bool m_moved = false;
 
     public:
