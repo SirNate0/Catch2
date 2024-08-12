@@ -482,14 +482,14 @@ TEST_CASE( "# A test name that starts with a #" ) {
     SUCCEED( "yay" );
 }
 
-TEST_CASE( "REDIRECT: multiple outputs 1", "[redirect-test]" ) {
+TEST_CASE( "REDIRECT: multiple outputs 1", "[approvals][redirect-test]" ) {
     std::cout << "start 1\n";
     SECTION( "A" ) { std::cout << "A\n"; }
     SECTION( "B" ) { std::cout << "B\n"; }
     std::cout << "end 1\n";
 }
 
-TEST_CASE( "REDIRECT: multiple outputs 2", "[redirect-test]" ) {
+TEST_CASE( "REDIRECT: multiple outputs 2", "[approvals][redirect-test]" ) {
     std::cout << "start 2\n";
     SECTION( "A" ) { std::cout << "A\n"; }
     SECTION( "B" ) { std::cout << "B\n"; }

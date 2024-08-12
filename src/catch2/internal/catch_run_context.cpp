@@ -292,10 +292,7 @@ namespace Catch {
             m_lastAssertionPassed = true;
         }
 
-        {
-            auto _ = scopedDeactivate( *m_outputRedirect );
-            m_reporter->assertionEnded( AssertionStats( result, m_messages, m_totals ) );
-        }
+        m_reporter->assertionEnded( AssertionStats( result, m_messages, m_totals ) );
 
         if ( result.getResultType() != ResultWas::Warning ) {
             m_messageScopes.clear();
@@ -312,14 +309,12 @@ namespace Catch {
     }
 
     void RunContext::notifyAssertionStarted( AssertionInfo const& info ) {
-        auto _ = scopedDeactivate( *m_outputRedirect );
         m_reporter->assertionStarting( info );
     }
 
     bool RunContext::sectionStarted( StringRef sectionName,
                                      SourceLineInfo const& sectionLineInfo,
                                      Counts& assertions ) {
-        auto _ = scopedDeactivate( *m_outputRedirect );
         ITracker& sectionTracker =
             SectionTracker::acquire( m_trackerContext,
                                      TestCaseTracking::NameAndLocationRef(
@@ -384,7 +379,6 @@ namespace Catch {
     }
 
     void RunContext::sectionEnded(SectionEndInfo&& endInfo) {
-        auto _ = scopedDeactivate( *m_outputRedirect );
         Counts assertions = m_totals.assertions - endInfo.prevAssertions;
         bool missingAssertions = testForMissingAssertions(assertions);
 
@@ -399,7 +393,6 @@ namespace Catch {
     }
 
     void RunContext::sectionEndedEarly(SectionEndInfo&& endInfo) {
-        auto _ = scopedDeactivate( *m_outputRedirect );
         if ( m_unfinishedSections.empty() ) {
             m_activeSections.back()->fail();
         } else {
@@ -577,7 +570,6 @@ namespace Catch {
                    itEnd = m_unfinishedSections.rend();
               it != itEnd;
               ++it ) {
-            scopedActivate( *m_outputRedirect );
             sectionEnded( CATCH_MOVE( *it ) );
         }
         m_unfinishedSections.clear();
